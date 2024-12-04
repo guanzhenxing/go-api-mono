@@ -16,19 +16,20 @@ type DB interface {
 	Save(value interface{}) error
 	Delete(value interface{}, where ...interface{}) error
 	First(dest interface{}, conds ...interface{}) error
+	GetDB() *gorm.DB
 }
 
 // DatabaseConfig defines the configuration for database connection
 type DatabaseConfig struct {
-	Host         string
-	Port         int
-	Username     string
-	Password     string
-	Database     string
-	MaxOpenConns int
-	MaxIdleConns int
-	MaxLifetime  time.Duration
-	Debug        bool
+	Host         string        `yaml:"host"`
+	Port         int           `yaml:"port"`
+	Username     string        `yaml:"username"`
+	Password     string        `yaml:"password"`
+	Database     string        `yaml:"database"`
+	MaxOpenConns int           `yaml:"maxOpenConns"`
+	MaxIdleConns int           `yaml:"maxIdleConns"`
+	MaxLifetime  time.Duration `yaml:"maxLifetime"`
+	Debug        bool          `yaml:"debug"`
 }
 
 type db struct {
@@ -84,4 +85,8 @@ func (d *db) Delete(value interface{}, where ...interface{}) error {
 
 func (d *db) First(dest interface{}, conds ...interface{}) error {
 	return d.DB.First(dest, conds...).Error
+}
+
+func (d *db) GetDB() *gorm.DB {
+	return d.DB
 }
