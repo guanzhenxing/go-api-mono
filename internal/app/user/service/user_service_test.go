@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -14,7 +15,6 @@ import (
 
 type MockDB struct {
 	mock.Mock
-	db *gorm.DB
 }
 
 func (m *MockDB) WithContext(ctx context.Context) database.DB {
@@ -38,11 +38,14 @@ func (m *MockDB) Delete(value interface{}, where ...interface{}) error {
 
 func (m *MockDB) First(dest interface{}, conds ...interface{}) error {
 	args := m.Called(dest, conds[0])
-	return args.Error(0)
+	if fn, ok := args.Get(0).(func(interface{})); ok {
+		fn(dest)
+	}
+	return args.Error(1)
 }
 
 func (m *MockDB) GetDB() *gorm.DB {
-	return m.db
+	return nil
 }
 
 func TestUserService_Register(t *testing.T) {
@@ -54,7 +57,7 @@ func TestUserService_Register(t *testing.T) {
 		Password: "password",
 	}
 
-	mockDB.On("Create", user).Return(nil)
+	mockDB.On("Create", mock.AnythingOfType("*model.User")).Return(nil)
 
 	err := service.Register(context.Background(), user)
 	assert.NoError(t, err)
@@ -70,10 +73,10 @@ func TestUserService_Get(t *testing.T) {
 		Username: "testuser",
 	}
 
-	mockDB.On("First", mock.Anything, uint(1)).Return(nil).Run(func(args mock.Arguments) {
-		arg := args.Get(0).(*model.User)
-		*arg = *user
-	})
+	mockDB.On("First", mock.AnythingOfType("*model.User"), uint(1)).Return(func(dest interface{}) {
+		u := dest.(*model.User)
+		*u = *user
+	}, nil)
 
 	result, err := service.Get(context.Background(), 1)
 	assert.NoError(t, err)
@@ -85,14 +88,30 @@ func TestUserService_Update(t *testing.T) {
 	mockDB := &MockDB{}
 	service := NewUserService(mockDB)
 
-	user := &model.User{
-		ID:       1,
-		Username: "testuser",
+	existingUser := &model.User{
+		ID:        1,
+		Username:  "testuser",
+		Password:  "hashedpassword",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 	}
 
-	mockDB.On("Save", user).Return(nil)
+	updatedUser := &model.User{
+		ID:       1,
+		Username: "newusername",
+		Password: "newpassword",
+	}
 
-	err := service.Update(context.Background(), user)
+	// Mock First call to get existing user
+	mockDB.On("First", mock.AnythingOfType("*model.User"), uint(1)).Return(func(dest interface{}) {
+		u := dest.(*model.User)
+		*u = *existingUser
+	}, nil)
+
+	// Mock Save call
+	mockDB.On("Save", mock.AnythingOfType("*model.User")).Return(nil)
+
+	err := service.Update(context.Background(), updatedUser)
 	assert.NoError(t, err)
 	mockDB.AssertExpectations(t)
 }
