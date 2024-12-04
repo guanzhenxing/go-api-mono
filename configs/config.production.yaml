@@ -1,0 +1,36 @@
+app:
+  name: "go-api-mono"
+  version: "v0.1.0"
+  mode: "production"
+
+server:
+  port: 8080
+  readTimeout: 30
+  writeTimeout: 30
+
+log:
+  level: "info"
+  filename: "/var/log/go-api-mono/app.log"
+  maxSize: 500
+  maxBackups: 10
+  maxAge: 90
+  compress: true
+
+db:
+  driver: "mysql"
+  master: "${DB_MASTER_URL}"  # 从环境变量读取
+  slave: "${DB_SLAVE_URL}"    # 从环境变量读取
+  maxOpenConns: 200
+  maxIdleConns: 50
+  connMaxLifetime: 7200
+  debug: false
+
+jwt:
+  signingKey: "${JWT_SECRET_KEY}"  # 从环境变量读取
+  expirationTime: 86400  # 24 hours in seconds
+  signingMethod: "HS256"
+  tokenPrefix: "Bearer"
+
+rateLimit:
+  requests: 1000   # 请求数/秒
+  burst: 2000      # 突发请求数 

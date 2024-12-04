@@ -1,0 +1,39 @@
+app:
+  name: "go-api-mono"
+  version: "v0.1.0"
+  mode: "testing"
+
+server:
+  port: 8080
+  readTimeout: "10s"
+  writeTimeout: "10s"
+  shutdownTimeout: "30s"
+
+log:
+  level: "debug"
+  filename: "logs/test.log"
+  maxSize: 100
+  maxBackups: 3
+  maxAge: 7
+  compress: true
+
+database:
+  host: "localhost"
+  port: 3306
+  username: "root"
+  password: "123456"
+  database: "go_api_mono_test"
+  maxOpenConns: 50
+  maxIdleConns: 10
+  maxLifetime: "1h"
+  debug: true
+
+jwt:
+  signingKey: "test-secret-key-must-be-at-least-32-chars"
+  expirationTime: "5m"
+  signingMethod: "HS256"
+  tokenPrefix: "Bearer"
+
+rateLimit:
+  requests: 1000   # 请求数/秒
+  burst: 2000      # 突发请求数

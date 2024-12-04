@@ -1,247 +1,140 @@
 package logger
 
 import (
-	"io"
+	"errors"
 	"os"
-	"path/filepath"
-	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-const (
-	// DefaultLevel the default log level
-	DefaultLevel = zapcore.InfoLevel
-
-	// DefaultTimeLayout the default time layout;
-	DefaultTimeLayout = time.RFC3339
+var (
+	// ErrInvalidLogLevel 表示无效的日志级别
+	ErrInvalidLogLevel = errors.New("invalid log level")
 )
 
-// Option custom setup config
-type Option func(*option)
-
-type option struct {
-	level           zapcore.Level
-	fields          map[string]string
-	file            io.Writer
-	timeLayout      string
-	outputInConsole bool
+// Logger 封装了zap.Logger
+type Logger struct {
+	logger *zap.Logger
 }
 
-// WithDebugLevel only greater than 'level' will output
-func WithDebugLevel() Option {
-	return func(opt *option) {
-		opt.level = zapcore.DebugLevel
-	}
+// LogConfig 定义了日志配置选项
+type LogConfig struct {
+	Level      string `yaml:"level"`      // 日志级别
+	Filename   string `yaml:"filename"`   // 日志文件名
+	MaxSize    int    `yaml:"maxSize"`    // 单个日志文件最大大小（MB）
+	MaxBackups int    `yaml:"maxBackups"` // 最大备份文件数
+	MaxAge     int    `yaml:"maxAge"`     // 最大保留天数
+	Compress   bool   `yaml:"compress"`   // 是否压缩
 }
 
-// WithInfoLevel only greater than 'level' will output
-func WithInfoLevel() Option {
-	return func(opt *option) {
-		opt.level = zapcore.InfoLevel
-	}
-}
-
-// WithWarnLevel only greater than 'level' will output
-func WithWarnLevel() Option {
-	return func(opt *option) {
-		opt.level = zapcore.WarnLevel
-	}
-}
-
-// WithErrorLevel only greater than 'level' will output
-func WithErrorLevel() Option {
-	return func(opt *option) {
-		opt.level = zapcore.ErrorLevel
-	}
-}
-
-// WithField add some field(s) to log
-func WithField(key, value string) Option {
-	return func(opt *option) {
-		opt.fields[key] = value
-	}
-}
-
-// WithFileP write log to some file
-func WithFileP(file string) Option {
-	dir := filepath.Dir(file)
-	if err := os.MkdirAll(dir, 0766); err != nil {
-		panic(err)
-	}
-
-	f, err := os.OpenFile(file, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0766)
+// New 创建一个新的日志记录器
+func New(opts LogConfig) (*Logger, error) {
+	// 解析日志级别
+	level, err := parseLogLevel(opts.Level)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	return func(opt *option) {
-		opt.file = zapcore.Lock(f)
-	}
-}
-
-// WithFileRotationP write log to some file with rotation
-func WithFileRotationP(file string) Option {
-	dir := filepath.Dir(file)
-	if err := os.MkdirAll(dir, 0766); err != nil {
-		panic(err)
-	}
-
-	return func(opt *option) {
-		opt.file = &lumberjack.Logger{ // concurrent-safed
-			Filename:   file, // 文件路径
-			MaxSize:    128,  // 单个文件最大尺寸，默认单位 M
-			MaxBackups: 300,  // 最多保留 300 个备份
-			MaxAge:     30,   // 最大时间，默认单位 day
-			LocalTime:  true, // 使用本地时间
-			Compress:   true, // 是否压缩 disabled by default
-		}
-	}
-}
-
-// WithTimeLayout custom time format
-func WithTimeLayout(timeLayout string) Option {
-	return func(opt *option) {
-		opt.timeLayout = timeLayout
-	}
-}
-
-// WithOutputInConsole write log to os.Stdout or os.Stderr
-func WithOutputInConsole() Option {
-	return func(opt *option) {
-		opt.outputInConsole = true
-	}
-}
-
-// NewJSONLogger return a json-encoder zap logger,
-func NewJSONLogger(opts ...Option) (*zap.Logger, error) {
-	opt := &option{level: DefaultLevel, fields: make(map[string]string)}
-	for _, f := range opts {
-		f(opt)
-	}
-
-	timeLayout := DefaultTimeLayout
-	if opt.timeLayout != "" {
-		timeLayout = opt.timeLayout
-	}
-
-	// similar to zap.NewProductionEncoderConfig()
+	// 创建编码器配置
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:       "time",
-		LevelKey:      "level",
-		NameKey:       "logger", // used by logger.Named(key); optional; useless
-		CallerKey:     "caller",
-		MessageKey:    "msg",
-		StacktraceKey: "stacktrace", // use by zap.AddStacktrace; optional; useless
-		LineEnding:    zapcore.DefaultLineEnding,
-		EncodeLevel:   zapcore.LowercaseLevelEncoder, // 小写编码器
-		EncodeTime: func(t time.Time, enc zapcore.PrimitiveArrayEncoder) {
-			enc.AppendString(t.Format(timeLayout))
-		},
-		EncodeDuration: zapcore.MillisDurationEncoder,
-		EncodeCaller:   zapcore.ShortCallerEncoder, // 全路径编码器
+		TimeKey:        "time",
+		LevelKey:       "level",
+		NameKey:        "logger",
+		CallerKey:      "caller",
+		MessageKey:     "msg",
+		StacktraceKey:  "stacktrace",
+		LineEnding:     zapcore.DefaultLineEnding,
+		EncodeLevel:    zapcore.LowercaseColorLevelEncoder, // 使用彩色日志级别
+		EncodeTime:     zapcore.ISO8601TimeEncoder,
+		EncodeDuration: zapcore.SecondsDurationEncoder,
+		EncodeCaller:   zapcore.ShortCallerEncoder,
 	}
 
-	jsonEncoder := zapcore.NewJSONEncoder(encoderConfig)
-
-	// lowPriority usd by info\debug\warn
-	lowPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		return lvl >= opt.level && lvl < zapcore.ErrorLevel
-	})
-
-	// highPriority usd by error\panic\fatal
-	highPriority := zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-		return lvl >= opt.level && lvl >= zapcore.ErrorLevel
-	})
-
-	stdout := zapcore.Lock(os.Stdout) // lock for concurrent safe
-	stderr := zapcore.Lock(os.Stderr) // lock for concurrent safe
-
-	core := zapcore.NewTee()
-
-	if opt.outputInConsole {
-		core = zapcore.NewTee(
-			zapcore.NewCore(jsonEncoder,
-				zapcore.NewMultiWriteSyncer(stdout),
-				lowPriority,
-			),
-			zapcore.NewCore(jsonEncoder,
-				zapcore.NewMultiWriteSyncer(stderr),
-				highPriority,
-			),
-		)
+	// 创建文件写入器
+	fileWriter := &lumberjack.Logger{
+		Filename:   opts.Filename,
+		MaxSize:    opts.MaxSize,
+		MaxBackups: opts.MaxBackups,
+		MaxAge:     opts.MaxAge,
+		Compress:   opts.Compress,
 	}
 
-	if opt.file != nil {
-		core = zapcore.NewTee(core,
-			zapcore.NewCore(jsonEncoder,
-				zapcore.AddSync(opt.file),
-				zap.LevelEnablerFunc(func(lvl zapcore.Level) bool {
-					return lvl >= opt.level
-				}),
-			),
-		)
+	// 创建多个输出核心
+	cores := []zapcore.Core{
+		// 文件输出核心（JSON格式）
+		zapcore.NewCore(
+			zapcore.NewJSONEncoder(encoderConfig),
+			zapcore.AddSync(fileWriter),
+			level,
+		),
+		// 控制台输出核心（带颜色的格式化输出）
+		zapcore.NewCore(
+			zapcore.NewConsoleEncoder(encoderConfig),
+			zapcore.AddSync(os.Stdout),
+			level,
+		),
 	}
 
-	logger := zap.New(core,
-		zap.AddCaller(),
-		zap.ErrorOutput(stderr),
-	)
+	// 使用NewTee将多个核心组合
+	core := zapcore.NewTee(cores...)
 
-	for key, value := range opt.fields {
-		logger = logger.WithOptions(zap.Fields(zapcore.Field{Key: key, Type: zapcore.StringType, String: value}))
-	}
+	// 创建日志记录器
+	logger := zap.New(core, zap.AddCaller(), zap.AddStacktrace(zapcore.ErrorLevel))
 
-	return logger, nil
+	return &Logger{logger: logger}, nil
 }
 
-var _ Meta = (*meta)(nil)
-
-// Meta key-value
-type Meta interface {
-	Key() string
-	Value() interface{}
-	meta()
+// Debug 记录调试级别的日志
+func (l *Logger) Debug(msg string, fields ...zap.Field) {
+	l.logger.Debug(msg, fields...)
 }
 
-type meta struct {
-	key   string
-	value interface{}
+// Info 记录信息级别的日志
+func (l *Logger) Info(msg string, fields ...zap.Field) {
+	l.logger.Info(msg, fields...)
 }
 
-func (m *meta) Key() string {
-	return m.key
+// Warn 记录警告级别的日志
+func (l *Logger) Warn(msg string, fields ...zap.Field) {
+	l.logger.Warn(msg, fields...)
 }
 
-func (m *meta) Value() interface{} {
-	return m.value
+// Error 记录错误级别的日志
+func (l *Logger) Error(msg string, fields ...zap.Field) {
+	l.logger.Error(msg, fields...)
 }
 
-func (m *meta) meta() {}
-
-// NewMeta create meat
-func NewMeta(key string, value interface{}) Meta {
-	return &meta{key: key, value: value}
+// Fatal 记录致命级别的日志
+func (l *Logger) Fatal(msg string, fields ...zap.Field) {
+	l.logger.Fatal(msg, fields...)
 }
 
-// WrapMeta wrap meta to zap fields
-func WrapMeta(err error, metas ...Meta) (fields []zap.Field) {
-	capacity := len(metas) + 1 // namespace meta
-	if err != nil {
-		capacity++
+// With 创建一个带有额外字段的日志记录器
+func (l *Logger) With(fields ...zap.Field) *Logger {
+	return &Logger{logger: l.logger.With(fields...)}
+}
+
+// Sync 同步日志缓冲区
+func (l *Logger) Sync() error {
+	return l.logger.Sync()
+}
+
+// parseLogLevel 解析日志级别字符串
+func parseLogLevel(level string) (zapcore.Level, error) {
+	switch level {
+	case "debug":
+		return zapcore.DebugLevel, nil
+	case "info":
+		return zapcore.InfoLevel, nil
+	case "warn":
+		return zapcore.WarnLevel, nil
+	case "error":
+		return zapcore.ErrorLevel, nil
+	case "fatal":
+		return zapcore.FatalLevel, nil
+	default:
+		return zapcore.InfoLevel, ErrInvalidLogLevel
 	}
-
-	fields = make([]zap.Field, 0, capacity)
-	if err != nil {
-		fields = append(fields, zap.Error(err))
-	}
-
-	fields = append(fields, zap.Namespace("meta"))
-	for _, meta := range metas {
-		fields = append(fields, zap.Any(meta.Key(), meta.Value()))
-	}
-
-	return
 }

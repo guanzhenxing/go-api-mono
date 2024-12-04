@@ -1,0 +1,39 @@
+app:
+  name: "go-api-mono"
+  version: "v0.1.0"
+  mode: "development"
+
+server:
+  port: 8080
+  readTimeout: "10s"
+  writeTimeout: "10s"
+  shutdownTimeout: "30s"
+
+log:
+  level: "debug"
+  filename: "logs/app.log"
+  maxSize: 100
+  maxBackups: 3
+  maxAge: 28
+  compress: true
+
+database:
+  host: "mysql"
+  port: 3306
+  username: "apiuser"
+  password: "apipass"
+  database: "go_api_mono"
+  maxOpenConns: 100
+  maxIdleConns: 10
+  maxLifetime: "1h"
+  debug: true
+
+jwt:
+  signingKey: "your-secret-key-change-it-in-production-32"
+  expirationTime: "24h"
+  signingMethod: "HS256"
+  tokenPrefix: "Bearer"
+
+rateLimit:
+  requests: 100    # 请求数/秒
+  burst: 200       # 突发请求数 
