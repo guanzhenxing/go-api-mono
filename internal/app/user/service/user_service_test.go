@@ -14,7 +14,7 @@ import (
 
 type MockDB struct {
 	mock.Mock
-	*gorm.DB
+	db *gorm.DB
 }
 
 func (m *MockDB) WithContext(ctx context.Context) database.DB {
@@ -39,6 +39,10 @@ func (m *MockDB) Delete(value interface{}, where ...interface{}) error {
 func (m *MockDB) First(dest interface{}, conds ...interface{}) error {
 	args := m.Called(dest, conds[0])
 	return args.Error(0)
+}
+
+func (m *MockDB) GetDB() *gorm.DB {
+	return m.db
 }
 
 func TestUserService_Register(t *testing.T) {

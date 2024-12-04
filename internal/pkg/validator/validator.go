@@ -10,11 +10,6 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// CustomValidator holds custom validation functions
-type CustomValidator struct {
-	validator *validator.Validate
-}
-
 // Register registers custom validation tags
 func Register() error {
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {

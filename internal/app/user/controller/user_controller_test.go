@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"go-api-mono/internal/app/user/model"
+	"go-api-mono/internal/pkg/validator"
 )
 
 type MockUserService struct {
@@ -58,9 +59,14 @@ func (m *MockUserService) Delete(ctx context.Context, id uint) error {
 	return args.Error(0)
 }
 
-func TestUserController_Create(t *testing.T) {
+func init() {
 	gin.SetMode(gin.TestMode)
+	if err := validator.Register(); err != nil {
+		panic(err)
+	}
+}
 
+func TestUserController_Create(t *testing.T) {
 	mockService := new(MockUserService)
 	controller := NewUserController(mockService)
 
@@ -68,8 +74,9 @@ func TestUserController_Create(t *testing.T) {
 	router.POST("/users", controller.Create)
 
 	user := &model.User{
-		Username: "testuser",
-		Password: "password",
+		Username: "testuser123",
+		Email:    "test@gmail.com",
+		Password: "Test123!@#",
 	}
 
 	mockService.On("Register", mock.Anything, mock.AnythingOfType("*model.User")).Return(nil)
@@ -86,8 +93,6 @@ func TestUserController_Create(t *testing.T) {
 }
 
 func TestUserController_Get(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
 	mockService := new(MockUserService)
 	controller := NewUserController(mockService)
 
@@ -97,6 +102,7 @@ func TestUserController_Get(t *testing.T) {
 	user := &model.User{
 		ID:       1,
 		Username: "testuser",
+		Email:    "test@gmail.com",
 	}
 
 	mockService.On("Get", mock.Anything, uint(1)).Return(user, nil)
@@ -111,8 +117,6 @@ func TestUserController_Get(t *testing.T) {
 }
 
 func TestUserController_Update(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
 	mockService := new(MockUserService)
 	controller := NewUserController(mockService)
 
@@ -121,7 +125,9 @@ func TestUserController_Update(t *testing.T) {
 
 	user := &model.User{
 		ID:       1,
-		Username: "testuser",
+		Username: "testuser123",
+		Email:    "test@gmail.com",
+		Password: "Test123!@#",
 	}
 
 	mockService.On("Update", mock.Anything, mock.AnythingOfType("*model.User")).Return(nil)
@@ -138,8 +144,6 @@ func TestUserController_Update(t *testing.T) {
 }
 
 func TestUserController_Delete(t *testing.T) {
-	gin.SetMode(gin.TestMode)
-
 	mockService := new(MockUserService)
 	controller := NewUserController(mockService)
 
@@ -153,6 +157,6 @@ func TestUserController_Delete(t *testing.T) {
 
 	router.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusNoContent, w.Code)
 	mockService.AssertExpectations(t)
 }
