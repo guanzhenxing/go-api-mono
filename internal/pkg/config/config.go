@@ -104,6 +104,15 @@ func Load() (*Config, error) {
 	return config, nil
 }
 
+// MustLoad 加载配置，如果出错则panic
+func MustLoad() *Config {
+	config, err := Load()
+	if err != nil {
+		panic(err)
+	}
+	return config
+}
+
 // setDefaults 设置默认配置值
 func setDefaults(config *Config) {
 	if config.App.Name == "" {

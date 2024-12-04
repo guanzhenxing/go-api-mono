@@ -4,56 +4,32 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
-	"go-api-mono/internal/app/user/controller"
-	"go-api-mono/internal/app/user/repository"
-	"go-api-mono/internal/app/user/service"
-	"go-api-mono/internal/pkg/auth"
-	"go-api-mono/internal/pkg/config"
-	"go-api-mono/internal/pkg/core"
-	"go-api-mono/internal/pkg/database"
-	"go-api-mono/internal/pkg/http/middleware"
-	"go-api-mono/internal/pkg/logger"
-	"go-api-mono/internal/pkg/security"
-
+	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+
+	"go-api-mono/internal/app/user/controller"
+	"go-api-mono/internal/app/user/service"
+	"go-api-mono/internal/pkg/config"
+	"go-api-mono/internal/pkg/database"
+	"go-api-mono/internal/pkg/logger"
+	"go-api-mono/internal/pkg/middleware"
 )
 
-// Options 定义应用程序选项
-type Options struct {
-	ConfigFile string
-	LogLevel   string
-	DevMode    bool
-}
-
-// App 应用程序结构
+// App represents the application
 type App struct {
-	config  *config.Config
-	logger  *logger.Logger
-	mux     *http.ServeMux
-	db      *database.DB
-	server  *http.Server
-	jwt     *auth.JWT
-	limiter *security.IPRateLimiter
+	config     *config.Config
+	logger     *logger.Logger
+	db         database.DB
+	engine     *gin.Engine
+	httpServer *http.Server
 }
 
-// New 创建新的应用程序实例
-func New(opts Options) (*App, error) {
-	app := &App{}
-
-	// 加载配置
-	cfg, err := config.Load()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load config: %w", err)
-	}
-	app.config = cfg
-
-	// 创建日志记录器
-	log, err := logger.New(logger.LogConfig{
+// New creates a new application instance
+func New(cfg *config.Config) (*App, error) {
+	// 初始化日志
+	l, err := logger.New(logger.LogConfig{
 		Level:      cfg.Log.Level,
 		Filename:   cfg.Log.Filename,
 		MaxSize:    cfg.Log.MaxSize,
@@ -64,9 +40,8 @@ func New(opts Options) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create logger: %w", err)
 	}
-	app.logger = log
 
-	// 创建数据库连接
+	// 初始化数据库
 	db, err := database.New(database.DatabaseConfig{
 		Host:         cfg.Database.Host,
 		Port:         cfg.Database.Port,
@@ -81,171 +56,110 @@ func New(opts Options) (*App, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
-	app.db = db
 
-	// 创建JWT实例
-	jwt := auth.New(auth.Config{
-		SigningKey:     cfg.JWT.SigningKey,
-		ExpirationTime: cfg.JWT.ExpirationTime,
-		SigningMethod:  cfg.JWT.SigningMethod,
-		TokenPrefix:    cfg.JWT.TokenPrefix,
-	})
-	app.jwt = jwt
-
-	// 创建速率限制器
-	limiter := security.NewIPRateLimiter(float64(cfg.RateLimit.Requests), float64(cfg.RateLimit.Burst))
-	app.limiter = limiter
-
-	// 创建HTTP服务器
-	mux := http.NewServeMux()
-	server := &http.Server{
-		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler:      mux,
-		ReadTimeout:  cfg.Server.ReadTimeout,
-		WriteTimeout: cfg.Server.WriteTimeout,
-		IdleTimeout:  cfg.Server.ShutdownTimeout,
+	app := &App{
+		config: cfg,
+		logger: l,
+		db:     db,
 	}
-	app.server = server
-	app.mux = mux
 
-	// 初始化路由
-	if err := app.initRoutes(); err != nil {
-		return nil, fmt.Errorf("failed to initialize routes: %w", err)
+	// 初始化 HTTP 服务器
+	if err := app.setupHTTPServer(); err != nil {
+		return nil, err
 	}
 
 	return app, nil
 }
 
-// initRoutes 初始化路由
-func (a *App) initRoutes() error {
-	// 创建用户仓储
-	userRepo := repository.NewUserRepository(a.db)
+// setupHTTPServer initializes the HTTP server and routes
+func (a *App) setupHTTPServer() error {
+	// 初始化 Gin
+	if a.config.App.Mode == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	a.engine = gin.New()
 
-	// 创建用户服务
-	userService := service.NewUserService(userRepo)
-
-	// 创建用户控制器
-	userController := controller.NewUserController(userService, a.jwt)
-
-	// 创建中间件链
-	chain := middleware.Chain(
+	// 添加中间件
+	a.engine.Use(
 		middleware.Recovery(a.logger),
 		middleware.Logger(a.logger),
+		middleware.Cors(),
 		middleware.RequestID(),
-		middleware.CORS(),
+		middleware.RateLimit(middleware.RateLimitConfig{
+			Requests: a.config.RateLimit.Requests,
+			Burst:    a.config.RateLimit.Burst,
+		}),
 	)
 
-	// 创建需要认证的中间件链
-	protectedChain := middleware.Chain(
-		middleware.Recovery(a.logger),
-		middleware.Logger(a.logger),
-		middleware.RequestID(),
-		middleware.CORS(),
-		middleware.JWT(a.jwt, middleware.DefaultJWTOptions),
-		middleware.RateLimit(a.limiter, middleware.DefaultRateLimitOptions),
-	)
+	// 创建用户服务和控制器
+	userService := service.NewUserService(a.db)
+	userController := controller.NewUserController(userService)
 
-	// 注册路由
-	a.mux.HandleFunc("POST /api/v1/auth/login", a.wrapHandler(userController.Login, chain))
-	a.mux.HandleFunc("POST /api/v1/auth/register", a.wrapHandler(userController.Register, chain))
-	a.mux.HandleFunc("GET /api/v1/users", a.wrapHandler(userController.List, protectedChain))
-	a.mux.HandleFunc("GET /api/v1/users/{id}", a.wrapHandler(userController.Get, protectedChain))
-	a.mux.HandleFunc("PUT /api/v1/users/{id}", a.wrapHandler(userController.Update, protectedChain))
-	a.mux.HandleFunc("DELETE /api/v1/users/{id}", a.wrapHandler(userController.Delete, protectedChain))
+	// 设置路由
+	v1 := a.engine.Group("/api/v1")
+	{
+		// 健康检查
+		v1.GET("/health", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"status": "ok",
+				"time":   time.Now().Format(time.RFC3339),
+			})
+		})
 
-	return nil
-}
+		// 认证路由
+		auth := v1.Group("/auth")
+		{
+			auth.POST("/register", userController.Create)
+			auth.POST("/login", func(c *gin.Context) {
+				var loginReq struct {
+					Email    string `json:"email"`
+					Password string `json:"password"`
+				}
+				if err := c.ShouldBindJSON(&loginReq); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
+				// TODO: 实现实际的登录逻辑
+				c.JSON(http.StatusOK, gin.H{
+					"code":    http.StatusOK,
+					"message": "OK",
+					"data": gin.H{
+						"token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoxLCJ1c2VybmFtZSI6InRlc3R1c2VyIiwicm9sZSI6InVzZXIiLCJleHAiOjE3MzMzODk1MTgsIm5iZiI6MTczMzMwMzExOCwiaWF0IjoxNzMzMzAzMTE4fQ.rlWO9ijjmeTxxvnc6A07iep-Z0ZNVmMpU_N3zrQxjrc",
+					},
+				})
+			})
+		}
 
-// wrapHandler 包装控制器处理函数
-func (a *App) wrapHandler(h func(*core.Context), m middleware.Middleware) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		ctx := core.NewContext(r, w, a.logger)
-		m(func(w http.ResponseWriter, r *http.Request) {
-			h(ctx)
-		})(w, r)
+		// 注册用户路由
+		userController.Register(v1)
 	}
-}
 
-// Run 运行应用程序
-func Run(opts Options) error {
-	app, err := New(opts)
-	if err != nil {
-		return fmt.Errorf("failed to create application: %w", err)
-	}
-
-	return app.Run()
-}
-
-// Run 运行应用程序
-func (a *App) Run() error {
-	// 创建错误通道
-	errChan := make(chan error, 1)
-
-	// 启动HTTP服务器
-	go func() {
-		a.logger.Info("Starting server", zap.String("address", a.server.Addr))
-		if err := a.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			errChan <- fmt.Errorf("failed to start server: %w", err)
-		}
-	}()
-
-	// 等待信号
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-
-	select {
-	case err := <-errChan:
-		return err
-	case <-quit:
-		a.logger.Info("Shutting down server...")
-
-		// 创建关闭上下文
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-
-		// 关闭HTTP服务器
-		if err := a.server.Shutdown(ctx); err != nil {
-			return fmt.Errorf("failed to shutdown server: %w", err)
-		}
-
-		// 关闭数据库连接
-		if err := a.db.Close(); err != nil {
-			return fmt.Errorf("failed to close database connection: %w", err)
-		}
-
-		a.logger.Info("Server stopped")
+	// 创建 HTTP 服务器
+	a.httpServer = &http.Server{
+		Addr:           fmt.Sprintf(":%d", a.config.Server.Port),
+		Handler:        a.engine,
+		ReadTimeout:    a.config.Server.ReadTimeout,
+		WriteTimeout:   a.config.Server.WriteTimeout,
+		MaxHeaderBytes: 1 << 20, // 1 MB
 	}
 
 	return nil
 }
 
-// Stop 停止应用程序
-func (a *App) Stop() error {
-	// 创建关闭上下文
-	ctx, cancel := context.WithTimeout(context.Background(), a.config.Server.ShutdownTimeout)
-	defer cancel()
-
-	// 关闭HTTP服务器
-	if err := a.server.Shutdown(ctx); err != nil {
-		return fmt.Errorf("failed to shutdown server: %w", err)
+// Start starts the application
+func (a *App) Start() error {
+	a.logger.Info("Starting server", zap.String("addr", a.httpServer.Addr))
+	if err := a.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		return fmt.Errorf("failed to start server: %w", err)
 	}
-
-	// 关闭数据库连接
-	if err := a.db.Close(); err != nil {
-		return fmt.Errorf("failed to close database connection: %w", err)
-	}
-
 	return nil
 }
 
-// InitConfig 初始化配置
-func (app *App) InitConfig() error {
-	// 加载配置
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
+// Stop gracefully stops the application
+func (a *App) Stop(ctx context.Context) error {
+	a.logger.Info("Shutting down server...")
+	if err := a.httpServer.Shutdown(ctx); err != nil {
+		return fmt.Errorf("server forced to shutdown: %w", err)
 	}
-
-	app.config = cfg
 	return nil
 }

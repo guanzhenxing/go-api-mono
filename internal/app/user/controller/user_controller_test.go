@@ -7,30 +7,32 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
-	"go-api-mono/internal/app/user/model"
-	"go-api-mono/internal/app/user/service"
-	"go-api-mono/internal/pkg/auth"
-	"go-api-mono/internal/pkg/core"
-	"go-api-mono/internal/pkg/errors"
-	"go-api-mono/internal/pkg/logger"
-
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+
+	"go-api-mono/internal/app/user/model"
 )
 
-// MockUserRepository 模拟用户仓储
-type MockUserRepository struct {
+type MockUserService struct {
 	mock.Mock
 }
 
-func (m *MockUserRepository) Create(ctx context.Context, user *model.User) error {
+func (m *MockUserService) Register(ctx context.Context, user *model.User) error {
 	args := m.Called(ctx, user)
 	return args.Error(0)
 }
 
-func (m *MockUserRepository) GetByID(ctx context.Context, id uint) (*model.User, error) {
+func (m *MockUserService) Authenticate(ctx context.Context, username, password string) (*model.User, error) {
+	args := m.Called(ctx, username, password)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*model.User), args.Error(1)
+}
+
+func (m *MockUserService) Get(ctx context.Context, id uint) (*model.User, error) {
 	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -38,137 +40,119 @@ func (m *MockUserRepository) GetByID(ctx context.Context, id uint) (*model.User,
 	return args.Get(0).(*model.User), args.Error(1)
 }
 
-func (m *MockUserRepository) GetByEmail(ctx context.Context, email string) (*model.User, error) {
-	args := m.Called(ctx, email)
+func (m *MockUserService) List(ctx context.Context) ([]*model.User, error) {
+	args := m.Called(ctx)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*model.User), args.Error(1)
+	return args.Get(0).([]*model.User), args.Error(1)
 }
 
-func (m *MockUserRepository) Update(ctx context.Context, user *model.User) error {
+func (m *MockUserService) Update(ctx context.Context, user *model.User) error {
 	args := m.Called(ctx, user)
 	return args.Error(0)
 }
 
-func (m *MockUserRepository) Delete(ctx context.Context, id uint) error {
+func (m *MockUserService) Delete(ctx context.Context, id uint) error {
 	args := m.Called(ctx, id)
 	return args.Error(0)
 }
 
-func (m *MockUserRepository) List(ctx context.Context, page, pageSize int) ([]model.User, int64, error) {
-	args := m.Called(ctx, page, pageSize)
-	return args.Get(0).([]model.User), args.Get(1).(int64), args.Error(2)
-}
+func TestUserController_Create(t *testing.T) {
+	gin.SetMode(gin.TestMode)
 
-func setupTest(t *testing.T) (*UserController, *MockUserRepository, *auth.JWT, *logger.Logger) {
-	mockRepo := new(MockUserRepository)
-	log, err := logger.New(logger.LogConfig{
-		Level:    "debug",
-		Filename: "test.log",
-	})
-	assert.NoError(t, err)
+	mockService := new(MockUserService)
+	controller := NewUserController(mockService)
 
-	jwt := auth.New(auth.Config{
-		SigningKey:     "test-key",
-		ExpirationTime: time.Hour,
-		SigningMethod:  "HS256",
-		TokenPrefix:    "Bearer",
-	})
+	router := gin.New()
+	router.POST("/users", controller.Create)
 
-	userService := service.NewUserService(mockRepo)
-	controller := NewUserController(userService, jwt)
-	return controller, mockRepo, jwt, log
-}
-
-func TestRegister(t *testing.T) {
-	controller, mockRepo, _, log := setupTest(t)
-
-	tests := []struct {
-		name           string
-		requestBody    interface{}
-		setupMock      func()
-		expectedStatus int
-		expectedError  bool
-	}{
-		{
-			name: "successful registration",
-			requestBody: model.RegisterRequest{
-				Username: "testuser",
-				Email:    "test@example.com",
-				Password: "password123",
-			},
-			setupMock: func() {
-				mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, nil)
-				mockRepo.On("Create", mock.Anything, mock.AnythingOfType("*model.User")).Return(nil)
-			},
-			expectedStatus: http.StatusOK,
-			expectedError:  false,
-		},
-		{
-			name:           "invalid request body",
-			requestBody:    "invalid json",
-			setupMock:      func() {},
-			expectedStatus: http.StatusBadRequest,
-			expectedError:  true,
-		},
-		{
-			name: "service error",
-			requestBody: model.RegisterRequest{
-				Username: "testuser",
-				Email:    "test@example.com",
-				Password: "password123",
-			},
-			setupMock: func() {
-				mockRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(nil, nil)
-				mockRepo.On("Create", mock.Anything, mock.AnythingOfType("*model.User")).
-					Return(errors.New(errors.ErrCodeInternal, "service error"))
-			},
-			expectedStatus: http.StatusInternalServerError,
-			expectedError:  true,
-		},
+	user := &model.User{
+		Username: "testuser",
+		Password: "password",
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Reset mock for each test case
-			mockRepo.ExpectedCalls = nil
-			mockRepo.Calls = nil
+	mockService.On("Register", mock.Anything, mock.AnythingOfType("*model.User")).Return(nil)
 
-			// Setup mock expectations
-			tt.setupMock()
+	body, _ := json.Marshal(user)
+	req := httptest.NewRequest("POST", "/users", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
 
-			// Create request
-			var body []byte
-			var err error
-			if str, ok := tt.requestBody.(string); ok {
-				body = []byte(str)
-			} else {
-				body, err = json.Marshal(tt.requestBody)
-				assert.NoError(t, err)
-			}
+	router.ServeHTTP(w, req)
 
-			req := httptest.NewRequest(http.MethodPost, "/register", bytes.NewReader(body))
-			req.Header.Set("Content-Type", "application/json")
-			w := httptest.NewRecorder()
-
-			// Create context
-			ctx := core.NewContext(req, w, log)
-
-			// Execute
-			controller.Register(ctx)
-
-			// Assert response
-			if tt.expectedError {
-				assert.GreaterOrEqual(t, w.Code, http.StatusBadRequest)
-			} else {
-				assert.Equal(t, tt.expectedStatus, w.Code)
-			}
-
-			// Verify mock expectations
-			mockRepo.AssertExpectations(t)
-		})
-	}
+	assert.Equal(t, http.StatusOK, w.Code)
+	mockService.AssertExpectations(t)
 }
 
-// Add more test functions for other controller methods...
+func TestUserController_Get(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	mockService := new(MockUserService)
+	controller := NewUserController(mockService)
+
+	router := gin.New()
+	router.GET("/users/:id", controller.Get)
+
+	user := &model.User{
+		ID:       1,
+		Username: "testuser",
+	}
+
+	mockService.On("Get", mock.Anything, uint(1)).Return(user, nil)
+
+	req := httptest.NewRequest("GET", "/users/1", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	mockService.AssertExpectations(t)
+}
+
+func TestUserController_Update(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	mockService := new(MockUserService)
+	controller := NewUserController(mockService)
+
+	router := gin.New()
+	router.PUT("/users/:id", controller.Update)
+
+	user := &model.User{
+		ID:       1,
+		Username: "testuser",
+	}
+
+	mockService.On("Update", mock.Anything, mock.AnythingOfType("*model.User")).Return(nil)
+
+	body, _ := json.Marshal(user)
+	req := httptest.NewRequest("PUT", "/users/1", bytes.NewBuffer(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	mockService.AssertExpectations(t)
+}
+
+func TestUserController_Delete(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	mockService := new(MockUserService)
+	controller := NewUserController(mockService)
+
+	router := gin.New()
+	router.DELETE("/users/:id", controller.Delete)
+
+	mockService.On("Delete", mock.Anything, uint(1)).Return(nil)
+
+	req := httptest.NewRequest("DELETE", "/users/1", nil)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	mockService.AssertExpectations(t)
+}

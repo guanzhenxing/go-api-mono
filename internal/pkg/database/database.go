@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -8,31 +9,34 @@ import (
 	"gorm.io/gorm"
 )
 
-var (
-	// ErrRecordNotFound 记录未找到错误
-	ErrRecordNotFound = gorm.ErrRecordNotFound
-)
-
-// DatabaseConfig 数据库配置
-type DatabaseConfig struct {
-	Host         string        `yaml:"host"`
-	Port         int           `yaml:"port"`
-	Username     string        `yaml:"username"`
-	Password     string        `yaml:"password"`
-	Database     string        `yaml:"database"`
-	MaxOpenConns int           `yaml:"maxOpenConns"`
-	MaxIdleConns int           `yaml:"maxIdleConns"`
-	MaxLifetime  time.Duration `yaml:"maxLifetime"`
-	Debug        bool          `yaml:"debug"`
+// DB defines the interface for database operations
+type DB interface {
+	WithContext(ctx context.Context) DB
+	Create(value interface{}) error
+	Save(value interface{}) error
+	Delete(value interface{}, where ...interface{}) error
+	First(dest interface{}, conds ...interface{}) error
 }
 
-// DB 封装 gorm.DB
-type DB struct {
+// DatabaseConfig defines the configuration for database connection
+type DatabaseConfig struct {
+	Host         string
+	Port         int
+	Username     string
+	Password     string
+	Database     string
+	MaxOpenConns int
+	MaxIdleConns int
+	MaxLifetime  time.Duration
+	Debug        bool
+}
+
+type db struct {
 	*gorm.DB
 }
 
-// New 创建数据库连接
-func New(config DatabaseConfig) (*DB, error) {
+// New creates a new database connection
+func New(config DatabaseConfig) (DB, error) {
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		config.Username,
 		config.Password,
@@ -41,39 +45,43 @@ func New(config DatabaseConfig) (*DB, error) {
 		config.Database,
 	)
 
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	gormDB, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	sqlDB, err := db.DB()
+	sqlDB, err := gormDB.DB()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get database instance: %w", err)
 	}
 
-	// 设置连接池
-	sqlDB.SetMaxIdleConns(config.MaxIdleConns)
 	sqlDB.SetMaxOpenConns(config.MaxOpenConns)
+	sqlDB.SetMaxIdleConns(config.MaxIdleConns)
 	sqlDB.SetConnMaxLifetime(config.MaxLifetime)
 
-	return &DB{DB: db}, nil
-}
-
-// Close 关闭数据库连接
-func (db *DB) Close() error {
-	sqlDB, err := db.DB.DB()
-	if err != nil {
-		return fmt.Errorf("failed to get database instance: %w", err)
+	if config.Debug {
+		gormDB = gormDB.Debug()
 	}
-	return sqlDB.Close()
+
+	return &db{gormDB}, nil
 }
 
-// AutoMigrate 自动迁移数据库表
-func (db *DB) AutoMigrate(models ...interface{}) error {
-	return db.DB.AutoMigrate(models...)
+func (d *db) WithContext(ctx context.Context) DB {
+	return &db{d.DB.WithContext(ctx)}
 }
 
-// Transaction 执行事务
-func (db *DB) Transaction(fn func(tx *gorm.DB) error) error {
-	return db.DB.Transaction(fn)
+func (d *db) Create(value interface{}) error {
+	return d.DB.Create(value).Error
+}
+
+func (d *db) Save(value interface{}) error {
+	return d.DB.Save(value).Error
+}
+
+func (d *db) Delete(value interface{}, where ...interface{}) error {
+	return d.DB.Delete(value, where...).Error
+}
+
+func (d *db) First(dest interface{}, conds ...interface{}) error {
+	return d.DB.First(dest, conds...).Error
 }

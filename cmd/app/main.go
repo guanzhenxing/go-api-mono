@@ -1,28 +1,32 @@
 package main
 
 import (
-	"fmt"
-	"os"
+	"context"
+	"log"
+	"os/signal"
+	"syscall"
 
 	"go-api-mono/internal/app"
+	"go-api-mono/internal/pkg/config"
 )
 
 func main() {
-	// 获取配置文件路径
-	configFile := os.Getenv("CONFIG_FILE")
-	if configFile == "" {
-		configFile = "configs/config.yaml"
+	app, err := app.New(config.MustLoad())
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	// 创建并运行应用程序
-	opts := app.Options{
-		ConfigFile: configFile,
-		LogLevel:   os.Getenv("LOG_LEVEL"),
-		DevMode:    os.Getenv("DEV_MODE") == "true",
-	}
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-	if err := app.Run(opts); err != nil {
-		fmt.Printf("Application error: %v\n", err)
-		os.Exit(1)
+	go func() {
+		if err := app.Start(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	<-ctx.Done()
+	if err := app.Stop(context.Background()); err != nil {
+		log.Printf("Failed to stop application: %v", err)
 	}
 }
