@@ -29,6 +29,12 @@ database:
   maxLifetime: "1h"
   debug: true
 
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+  db: 0
+
 jwt:
   signingKey: "your-secret-key-change-it-in-production-32"
   expirationTime: "24h"

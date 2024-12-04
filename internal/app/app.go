@@ -10,6 +10,7 @@ import (
 
 	"go-api-mono/internal/app/user/controller"
 	"go-api-mono/internal/app/user/service"
+	"go-api-mono/internal/pkg/cache"
 	"go-api-mono/internal/pkg/config"
 	"go-api-mono/internal/pkg/database"
 	"go-api-mono/internal/pkg/health"
@@ -23,6 +24,7 @@ type App struct {
 	config     *config.Config
 	logger     *logger.Logger
 	db         database.DB
+	cache      cache.Cache
 	health     *health.Checker
 	httpServer *http.Server
 }
@@ -51,18 +53,30 @@ func New(cfg *config.Config) (*App, error) {
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
 
+	// Initialize Redis
+	redisCache, err := cache.NewRedisCache(cache.RedisConfig{
+		Host:     cfg.Redis.Host,
+		Port:     cfg.Redis.Port,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize redis: %w", err)
+	}
+
 	// Initialize validator
 	if err := validator.Register(); err != nil {
 		return nil, fmt.Errorf("failed to register validator: %w", err)
 	}
 
 	// Initialize health checker
-	healthChecker := health.NewChecker(db, cfg.App.Version)
+	healthChecker := health.NewChecker(db, redisCache, cfg.App.Version)
 
 	return &App{
 		config: cfg,
 		logger: log,
 		db:     db,
+		cache:  redisCache,
 		health: healthChecker,
 	}, nil
 }
@@ -105,6 +119,12 @@ func (a *App) Start() error {
 // Stop stops the application
 func (a *App) Stop(ctx context.Context) error {
 	a.logger.Info("Shutting down server...")
+
+	// Close Redis connection
+	if err := a.cache.Close(); err != nil {
+		a.logger.Error("Failed to close redis connection", zap.Error(err))
+	}
+
 	return a.httpServer.Shutdown(ctx)
 }
 

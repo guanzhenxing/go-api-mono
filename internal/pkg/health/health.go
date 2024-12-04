@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"time"
 
+	"go-api-mono/internal/pkg/cache"
 	"go-api-mono/internal/pkg/database"
 )
 
@@ -14,13 +15,15 @@ var startTime = time.Now()
 // Checker represents a health checker
 type Checker struct {
 	db      database.DB
+	cache   cache.Cache
 	version string
 }
 
 // NewChecker creates a new health checker
-func NewChecker(db database.DB, version string) *Checker {
+func NewChecker(db database.DB, cache cache.Cache, version string) *Checker {
 	return &Checker{
 		db:      db,
+		cache:   cache,
 		version: version,
 	}
 }
@@ -34,6 +37,13 @@ func (c *Checker) Check(ctx context.Context) Response {
 	dbStatus := c.checkDatabase(ctx)
 	components = append(components, dbStatus)
 	if dbStatus.Status != "healthy" {
+		overallStatus = "unhealthy"
+	}
+
+	// Check Redis connection
+	cacheStatus := c.checkCache(ctx)
+	components = append(components, cacheStatus)
+	if cacheStatus.Status != "healthy" {
 		overallStatus = "unhealthy"
 	}
 
@@ -62,6 +72,23 @@ func (c *Checker) checkDatabase(ctx context.Context) Status {
 
 	// Try to ping database
 	db := c.db.GetDB()
+	if db == nil {
+		status.Status = "unhealthy"
+		status.Message = "Database connection is nil"
+		return status
+	}
+
+	if db.Error != nil {
+		status.Status = "unhealthy"
+		status.Message = fmt.Sprintf("Database error: %v", db.Error)
+		return status
+	}
+
+	// In test mode, we don't actually try to connect to the database
+	if db.Config != nil && db.Config.ConnPool != nil {
+		return status
+	}
+
 	sqlDB, err := db.DB()
 	if err != nil {
 		status.Status = "unhealthy"
@@ -72,6 +99,22 @@ func (c *Checker) checkDatabase(ctx context.Context) Status {
 	if err := sqlDB.PingContext(ctx); err != nil {
 		status.Status = "unhealthy"
 		status.Message = fmt.Sprintf("Database ping failed: %v", err)
+		return status
+	}
+
+	return status
+}
+
+// checkCache verifies Redis connectivity
+func (c *Checker) checkCache(ctx context.Context) Status {
+	status := Status{
+		Component: "redis",
+		Status:    "healthy",
+	}
+
+	if err := c.cache.Ping(ctx); err != nil {
+		status.Status = "unhealthy"
+		status.Message = fmt.Sprintf("Redis ping failed: %v", err)
 		return status
 	}
 

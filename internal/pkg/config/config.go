@@ -17,6 +17,7 @@ type Config struct {
 	Server    ServerConfig               `yaml:"server"`
 	Log       logger.LogConfig           `yaml:"log"`
 	Database  DatabaseConfig             `yaml:"database"`
+	Redis     RedisConfig                `yaml:"redis"`
 	RateLimit middleware.RateLimitConfig `yaml:"rateLimit"`
 }
 
@@ -47,6 +48,14 @@ type DatabaseConfig struct {
 	MaxIdleConns int           `yaml:"maxIdleConns"`
 	MaxLifetime  time.Duration `yaml:"maxLifetime"`
 	Debug        bool          `yaml:"debug"`
+}
+
+// RedisConfig represents the Redis configuration
+type RedisConfig struct {
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	Password string `yaml:"password"`
+	DB       int    `yaml:"db"`
 }
 
 // MustLoad loads the configuration from file
