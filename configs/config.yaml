@@ -42,5 +42,6 @@ jwt:
   tokenPrefix: "Bearer"
 
 rateLimit:
-  requests: 100    # 请求数/秒
-  burst: 200       # 突发请求数
+  enabled: true
+  limit: 100    # 每秒允许的请求数
+  burst: 200    # 突发请求数

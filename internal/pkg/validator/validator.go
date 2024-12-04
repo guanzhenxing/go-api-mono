@@ -10,7 +10,8 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-// Register registers custom validation tags
+// Register 注册自定义验证标签和错误消息
+// 它会向 Gin 的验证器中添加自定义的验证规则
 func Register() error {
 	if v, ok := binding.Validator.Engine().(*validator.Validate); ok {
 		// 注册自定义验证函数
@@ -24,7 +25,8 @@ func Register() error {
 			return err
 		}
 
-		// 注册自定义错误消息
+		// 注册自定义错误消息处理函数
+		// 使用 JSON 标签作为字段名，以保持一致性
 		v.RegisterTagNameFunc(func(fld reflect.StructField) string {
 			name := strings.SplitN(fld.Tag.Get("json"), ",", 2)[0]
 			if name == "-" {
@@ -38,37 +40,46 @@ func Register() error {
 	return fmt.Errorf("failed to register validator")
 }
 
-// validatePassword checks if the password meets security requirements
+// validatePassword 检查密码是否满足安全要求
+// 密码必须包含：
+// - 至少一个大写字母
+// - 至少一个小写字母
+// - 至少一个数字
+// - 至少一个特殊字符
 func validatePassword(fl validator.FieldLevel) bool {
 	password := fl.Field().String()
 
-	// 至少包含一个大写字母
+	// 检查是否包含大写字母
 	hasUpper := strings.ContainsAny(password, "ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	// 至少包含一个小写字母
+	// 检查是否包含小写字母
 	hasLower := strings.ContainsAny(password, "abcdefghijklmnopqrstuvwxyz")
-	// 至少包含一个数字
+	// 检查是否包含数字
 	hasNumber := strings.ContainsAny(password, "0123456789")
-	// 至少包含一个特殊字符
+	// 检查是否包含特殊字符
 	hasSpecial := strings.ContainsAny(password, "!@#$%^&*()_+-=[]{}|;:,.<>?")
 
 	return hasUpper && hasLower && hasNumber && hasSpecial
 }
 
-// validateUsername performs additional username validation
+// validateUsername 执行用户名的附加验证
+// 用户名必须：
+// - 以字母开头
+// - 不能包含连续的下划线
+// - 不能以特殊字符结尾
 func validateUsername(fl validator.FieldLevel) bool {
 	username := fl.Field().String()
 
-	// 不允许以特殊字符开头
+	// 检查是否以字母开头
 	if matched, _ := regexp.MatchString(`^[^a-zA-Z]`, username); matched {
 		return false
 	}
 
-	// 不允许连续的下划线
+	// 检查是否包含连续的下划线
 	if strings.Contains(username, "__") {
 		return false
 	}
 
-	// 不允许特殊字符结尾
+	// 检查是否以特殊字符结尾
 	if matched, _ := regexp.MatchString(`[^a-zA-Z0-9]$`, username); matched {
 		return false
 	}
@@ -76,7 +87,10 @@ func validateUsername(fl validator.FieldLevel) bool {
 	return true
 }
 
-// validateEmailDomain performs email domain validation
+// validateEmailDomain 执行邮箱域名验证
+// 它会：
+// - 检查域名格式是否正确
+// - 检查域名是否在黑名单中
 func validateEmailDomain(fl validator.FieldLevel) bool {
 	email := fl.Field().String()
 	parts := strings.Split(email, "@")
@@ -86,12 +100,12 @@ func validateEmailDomain(fl validator.FieldLevel) bool {
 
 	domain := strings.ToLower(parts[1])
 
-	// 检查域名格式
+	// 验证域名格式
 	if matched, _ := regexp.MatchString(`^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}$`, domain); !matched {
 		return false
 	}
 
-	// 域名黑名单
+	// 检查域名是否在黑名单中
 	blacklist := []string{
 		"example.com",
 		"test.com",
@@ -107,16 +121,18 @@ func validateEmailDomain(fl validator.FieldLevel) bool {
 	return true
 }
 
-// ValidationError represents a validation error
+// ValidationError 表示验证错误
+// 它包含字段名和错误消息
 type ValidationError struct {
-	Field   string `json:"field"`
-	Message string `json:"message"`
+	Field   string `json:"field"`   // 验证失败的字段名
+	Message string `json:"message"` // 错误描述信息
 }
 
-// ValidationErrors is a collection of ValidationError
+// ValidationErrors 是验证错误的集合
 type ValidationErrors []ValidationError
 
-// FormatError formats validator.ValidationErrors into ValidationErrors
+// FormatError 将验证器的错误转换为用户友好的格式
+// 它会将每个验证错误转换为包含字段名和错误消息的结构
 func FormatError(err error) ValidationErrors {
 	var errors ValidationErrors
 
@@ -136,26 +152,27 @@ func FormatError(err error) ValidationErrors {
 	return errors
 }
 
-// getErrorMsg returns a user-friendly error message for validation errors
+// getErrorMsg 返回验证错误的用户友好消息
+// 它根据验证标签类型返回相应的错误描述
 func getErrorMsg(e validator.FieldError) string {
 	switch e.Tag() {
 	case "required":
-		return "This field is required"
+		return "此字段为必填项"
 	case "email":
-		return "Invalid email format"
+		return "邮箱格式不正确"
 	case "min":
-		return fmt.Sprintf("Minimum length is %s", e.Param())
+		return fmt.Sprintf("最小长度为 %s", e.Param())
 	case "max":
-		return fmt.Sprintf("Maximum length is %s", e.Param())
+		return fmt.Sprintf("最大长度为 %s", e.Param())
 	case "alphanum":
-		return "Must contain only letters and numbers"
+		return "只能包含字母和数字"
 	case "password":
-		return "Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character"
+		return "密码必须包含至少一个大写字母、一个小写字母、一个数字和一个特殊字符"
 	case "username_valid":
-		return "Username must start with a letter, cannot contain consecutive special characters, and must end with a letter or number"
+		return "用户名必须以字母开头，不能包含连续的特殊字符，且必须以字母或数字结尾"
 	case "email_domain":
-		return "Email domain is not allowed or invalid"
+		return "邮箱域名不被允许或格式不正确"
 	default:
-		return fmt.Sprintf("Validation failed on condition: %s", e.Tag())
+		return fmt.Sprintf("验证失败：%s", e.Tag())
 	}
 }

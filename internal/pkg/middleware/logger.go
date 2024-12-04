@@ -9,9 +9,15 @@ import (
 	"go-api-mono/internal/pkg/logger"
 )
 
-// Logger creates a logger middleware
+// Logger 创建一个日志中间件
+// 它会记录每个请求的详细信息，包括：
+// - 请求方法和路径
+// - 响应状态码
+// - 处理时间
+// - 请求ID
 func Logger(log *logger.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 记录开始时间
 		start := time.Now()
 		path := c.Request.URL.Path
 		query := c.Request.URL.RawQuery

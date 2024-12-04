@@ -26,8 +26,8 @@ test_register() {
         -H "Content-Type: application/json" \
         -d '{
             "username": "testuser",
-            "email": "test@example.com",
-            "password": "password123"
+            "email": "test@gmail.com",
+            "password": "Test123!@#"
         }')
     
     status_code=$(echo "$response" | tail -n1)
@@ -49,8 +49,8 @@ test_login() {
     response=$(curl -s -w "\n%{http_code}" -X POST "${BASE_URL}/auth/login" \
         -H "Content-Type: application/json" \
         -d '{
-            "email": "test@example.com",
-            "password": "password123"
+            "email": "test@gmail.com",
+            "password": "Test123!@#"
         }')
     
     status_code=$(echo "$response" | tail -n1)
@@ -84,7 +84,7 @@ test_list_users() {
     fi
 }
 
-# 测试获取用户详情
+# ���试获取用户详情
 test_get_user() {
     echo "Testing get user details..."
     response=$(curl -s -w "\n%{http_code}" -X GET "${BASE_URL}/users/${USER_ID}" \
@@ -103,22 +103,14 @@ test_get_user() {
 # 测试更新用户
 test_update_user() {
     echo "Testing update user..."
-    # 先获取用户当前信息
-    current_user=$(curl -s -X GET "${BASE_URL}/users/${USER_ID}" \
-        -H "Authorization: Bearer $TOKEN" | jq -r '.data')
-    
-    created_at=$(echo "$current_user" | jq -r '.created_at')
-    updated_at=$(echo "$current_user" | jq -r '.updated_at')
-    
     response=$(curl -s -w "\n%{http_code}" -X PUT "${BASE_URL}/users/${USER_ID}" \
         -H "Authorization: Bearer $TOKEN" \
         -H "Content-Type: application/json" \
-        -d "{
-            \"username\": \"updated_user\",
-            \"email\": \"updated@example.com\",
-            \"created_at\": \"$created_at\",
-            \"updated_at\": \"$updated_at\"
-        }")
+        -d '{
+            "username": "updateduser",
+            "email": "updated@gmail.com",
+            "password": "Test123!@#"
+        }')
     
     status_code=$(echo "$response" | tail -n1)
     body=$(echo "$response" | sed '$d')
