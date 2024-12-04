@@ -9,6 +9,7 @@ import (
 	"go-api-mono/internal/app/user/model"
 	"go-api-mono/internal/app/user/service"
 	"go-api-mono/internal/pkg/response"
+	"go-api-mono/internal/pkg/validator"
 )
 
 // UserController handles HTTP requests for users
@@ -39,6 +40,24 @@ func (c *UserController) Register(r *gin.RouterGroup) {
 func (c *UserController) Create(ctx *gin.Context) {
 	var user model.User
 	if err := ctx.ShouldBindJSON(&user); err != nil {
+		if validationErrors := validator.FormatError(err); len(validationErrors) > 0 {
+			ctx.JSON(http.StatusBadRequest, gin.H{
+				"code":    http.StatusBadRequest,
+				"message": "Validation failed",
+				"errors":  validationErrors,
+			})
+			return
+		}
+		response.Error(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	if err := user.Validate(); err != nil {
+		response.Error(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	if err := user.ValidatePasswordStrength(); err != nil {
 		response.Error(ctx, http.StatusBadRequest, err)
 		return
 	}
@@ -108,10 +127,30 @@ func (c *UserController) Update(ctx *gin.Context) {
 
 	var user model.User
 	if err := ctx.ShouldBindJSON(&user); err != nil {
+		if validationErrors := validator.FormatError(err); len(validationErrors) > 0 {
+			ctx.JSON(http.StatusBadRequest, gin.H{
+				"code":    http.StatusBadRequest,
+				"message": "Validation failed",
+				"errors":  validationErrors,
+			})
+			return
+		}
 		response.Error(ctx, http.StatusBadRequest, err)
 		return
 	}
 	user.ID = uint(id)
+
+	if err := user.Validate(); err != nil {
+		response.Error(ctx, http.StatusBadRequest, err)
+		return
+	}
+
+	if user.Password != "" {
+		if err := user.ValidatePasswordStrength(); err != nil {
+			response.Error(ctx, http.StatusBadRequest, err)
+			return
+		}
+	}
 
 	if err := c.userService.Update(ctx, &user); err != nil {
 		response.Error(ctx, http.StatusInternalServerError, err)
