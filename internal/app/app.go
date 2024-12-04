@@ -15,6 +15,7 @@ import (
 	"go-api-mono/internal/pkg/database"
 	"go-api-mono/internal/pkg/logger"
 	"go-api-mono/internal/pkg/middleware"
+	"go-api-mono/internal/pkg/validator"
 )
 
 // App represents the application
@@ -78,6 +79,11 @@ func (a *App) setupHTTPServer() error {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	a.engine = gin.New()
+
+	// 注册验证器
+	if err := validator.Register(); err != nil {
+		return fmt.Errorf("failed to register validator: %w", err)
+	}
 
 	// 添加中间件
 	a.engine.Use(
