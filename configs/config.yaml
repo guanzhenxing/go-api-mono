@@ -4,11 +4,11 @@ app:
   mode: "development"
 
 server:
-  port: 8080
+  port: 2024
   readTimeout: "10s"
   writeTimeout: "10s"
   shutdownTimeout: "30s"
-  addr: ":8080"
+  addr: ":2024"
 
 log:
   level: "debug"
@@ -21,8 +21,8 @@ log:
 database:
   host: "localhost"
   port: 3306
-  username: "root"
-  password: "123456"
+  username: "apiuser"
+  password: "apipass"
   database: "go_api_mono"
   maxOpenConns: 100
   maxIdleConns: 10

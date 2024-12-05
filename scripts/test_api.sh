@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # API基础URL
-BASE_URL="http://localhost:8080/api/v1"
+BASE_URL="http://localhost:2024/api/v1"
 TOKEN=""
 USER_ID=""
 
@@ -84,7 +84,7 @@ test_list_users() {
     fi
 }
 
-# ���试获取用户详情
+# 试获取用户详情
 test_get_user() {
     echo "Testing get user details..."
     response=$(curl -s -w "\n%{http_code}" -X GET "${BASE_URL}/users/${USER_ID}" \

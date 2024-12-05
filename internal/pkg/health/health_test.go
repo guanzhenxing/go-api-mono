@@ -49,6 +49,19 @@ func (m *mockDB) GetDB() *gorm.DB {
 	return nil
 }
 
+func (m *mockDB) Model(value interface{}) database.DB {
+	return m
+}
+
+func (m *mockDB) Updates(values interface{}) error {
+	args := m.Called(values)
+	return args.Error(0)
+}
+
+func (m *mockDB) Debug() database.DB {
+	return m
+}
+
 // mockCache 模拟缓存接口
 type mockCache struct {
 	mock.Mock

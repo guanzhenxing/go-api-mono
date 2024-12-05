@@ -16,6 +16,9 @@ type DB interface {
 	Save(value interface{}) error
 	Delete(value interface{}, where ...interface{}) error
 	First(dest interface{}, conds ...interface{}) error
+	Model(value interface{}) DB
+	Updates(values interface{}) error
+	Debug() DB
 	GetDB() *gorm.DB
 }
 
@@ -85,6 +88,18 @@ func (d *db) Delete(value interface{}, where ...interface{}) error {
 
 func (d *db) First(dest interface{}, conds ...interface{}) error {
 	return d.DB.First(dest, conds...).Error
+}
+
+func (d *db) Model(value interface{}) DB {
+	return &db{DB: d.DB.Model(value)}
+}
+
+func (d *db) Updates(values interface{}) error {
+	return d.DB.Updates(values).Error
+}
+
+func (d *db) Debug() DB {
+	return &db{DB: d.DB.Debug()}
 }
 
 func (d *db) GetDB() *gorm.DB {

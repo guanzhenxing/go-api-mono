@@ -4,7 +4,7 @@ app:
   mode: "production"
 
 server:
-  port: 8080
+  port: 2024
   readTimeout: 30
   writeTimeout: 30
 

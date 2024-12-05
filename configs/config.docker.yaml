@@ -4,10 +4,11 @@ app:
   mode: "development"
 
 server:
-  port: 8080
+  port: 2024
   readTimeout: "10s"
   writeTimeout: "10s"
   shutdownTimeout: "30s"
+  addr: ":2024"
 
 log:
   level: "debug"
@@ -28,6 +29,12 @@ database:
   maxLifetime: "1h"
   debug: true
 
+redis:
+  host: "redis"
+  port: 6379
+  password: ""
+  db: 0
+
 jwt:
   signingKey: "your-secret-key-change-it-in-production-32"
   expirationTime: "24h"
@@ -36,4 +43,4 @@ jwt:
 
 rateLimit:
   requests: 100    # 请求数/秒
-  burst: 200       # 突发请求数 
+  burst: 200       # 突发请求数

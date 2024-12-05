@@ -159,7 +159,7 @@ func (a *App) setupHTTPServer(router *gin.Engine) {
 	v1 := router.Group("/api/v1")
 
 	// 用户服务
-	userService := service.NewUserService(a.db)
+	userService := service.NewUserService(a.db, a.logger)
 
 	// 认证路由
 	v1.POST("/auth/register", controller.NewUserController(userService).Create)

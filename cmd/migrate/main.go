@@ -21,7 +21,7 @@ func main() {
 	}
 
 	migrationsPath := filepath.Join(dir, "scripts/migrations")
-	dsn := "mysql://root:123456@tcp(localhost:3306)/go_api_mono?multiStatements=true"
+	dsn := "mysql://apiuser:apipass@tcp(localhost:3306)/go_api_mono?multiStatements=true"
 
 	m, err := migrate.New(
 		"file://"+migrationsPath,

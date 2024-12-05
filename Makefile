@@ -112,7 +112,7 @@ bench:
 profile:
 	@mkdir -p $(COVERAGE_DIR)
 	$(GO) test -cpuprofile=$(COVERAGE_DIR)/cpu.prof -memprofile=$(COVERAGE_DIR)/mem.prof -bench=. ./...
-	$(GO) tool pprof -http=:8080 $(COVERAGE_DIR)/cpu.prof
+	$(GO) tool pprof -http=:2024 $(COVERAGE_DIR)/cpu.prof
 
 # 漏洞检查
 vuln:
@@ -166,7 +166,7 @@ docker-build:
 
 # Docker运行
 docker-run:
-	docker run -p 8080:8080 --env-file .env.$(ENV) $(DOCKER_IMAGE):$(DOCKER_TAG)
+	docker run -p 2024:2024 --env-file .env.$(ENV) $(DOCKER_IMAGE):$(DOCKER_TAG)
 
 # 生成swagger文档
 swagger:
