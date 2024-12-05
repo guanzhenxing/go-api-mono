@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"go-api-mono/internal/pkg/errors"
+	"go-api-mono/pkg/errors"
 
 	"github.com/golang-jwt/jwt/v5"
 )

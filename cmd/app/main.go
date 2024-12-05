@@ -7,7 +7,7 @@ import (
 	"syscall"
 
 	"go-api-mono/internal/app"
-	"go-api-mono/internal/pkg/config"
+	"go-api-mono/pkg/config"
 )
 
 // main 是应用程序的入口点

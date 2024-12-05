@@ -6,8 +6,8 @@ import (
 	"go.uber.org/zap"
 
 	"go-api-mono/internal/app/user/model"
-	"go-api-mono/internal/pkg/database"
-	"go-api-mono/internal/pkg/logger"
+	"go-api-mono/pkg/database"
+	"go-api-mono/pkg/logger"
 )
 
 // UserRepository defines the interface for user data operations

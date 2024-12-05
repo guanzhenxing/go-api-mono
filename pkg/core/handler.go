@@ -3,7 +3,7 @@ package core
 import (
 	"net/http"
 
-	"go-api-mono/internal/pkg/logger"
+	"go-api-mono/pkg/logger"
 )
 
 // HandlerFunc 定义了处理函数的类型

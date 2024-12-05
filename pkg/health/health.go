@@ -6,8 +6,8 @@ import (
 	"runtime"
 	"time"
 
-	"go-api-mono/internal/pkg/cache"
-	"go-api-mono/internal/pkg/database"
+	"go-api-mono/pkg/cache"
+	"go-api-mono/pkg/database"
 )
 
 // 记录应用启动时间，用于计算运行时长

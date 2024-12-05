@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"go-api-mono/internal/pkg/auth"
+	"go-api-mono/pkg/auth"
 )
 
 // JWTAuthMiddleware creates a JWT authentication middleware

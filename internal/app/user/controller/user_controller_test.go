@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	"go-api-mono/internal/app/user/model"
-	"go-api-mono/internal/pkg/validator"
+	"go-api-mono/pkg/validator"
 )
 
 type MockUserService struct {

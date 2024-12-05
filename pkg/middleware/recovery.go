@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"go-api-mono/internal/pkg/logger"
+	"go-api-mono/pkg/logger"
 )
 
 // Recovery 创建一个恢复中间件，用于捕获 panic

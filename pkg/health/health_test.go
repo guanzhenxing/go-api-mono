@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"gorm.io/gorm"
 
-	"go-api-mono/internal/pkg/database"
+	"go-api-mono/pkg/database"
 )
 
 // mockDB 模拟数据库接口

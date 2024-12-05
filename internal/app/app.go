@@ -12,13 +12,13 @@ import (
 
 	"go-api-mono/internal/app/user/controller"
 	"go-api-mono/internal/app/user/service"
-	"go-api-mono/internal/pkg/cache"
-	"go-api-mono/internal/pkg/config"
-	"go-api-mono/internal/pkg/database"
-	"go-api-mono/internal/pkg/health"
-	"go-api-mono/internal/pkg/logger"
-	"go-api-mono/internal/pkg/middleware"
-	"go-api-mono/internal/pkg/validator"
+	"go-api-mono/pkg/cache"
+	"go-api-mono/pkg/config"
+	"go-api-mono/pkg/database"
+	"go-api-mono/pkg/health"
+	"go-api-mono/pkg/logger"
+	"go-api-mono/pkg/middleware"
+	"go-api-mono/pkg/validator"
 )
 
 // LoginRequest 定义登录请求的结构

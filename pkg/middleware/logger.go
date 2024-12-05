@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 
-	"go-api-mono/internal/pkg/logger"
+	"go-api-mono/pkg/logger"
 )
 
 // Logger 创建一个日志中间件

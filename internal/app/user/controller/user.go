@@ -8,8 +8,8 @@ import (
 
 	"go-api-mono/internal/app/user/model"
 	"go-api-mono/internal/app/user/service"
-	"go-api-mono/internal/pkg/response"
-	"go-api-mono/internal/pkg/validator"
+	"go-api-mono/pkg/response"
+	"go-api-mono/pkg/validator"
 )
 
 // UserController handles HTTP requests for users

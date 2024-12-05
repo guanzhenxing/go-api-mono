@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"go-api-mono/internal/pkg/logger"
+	"go-api-mono/pkg/logger"
 )
 
 // Middleware 定义了中间件函数类型

@@ -12,8 +12,8 @@ import (
 
 	"go-api-mono/internal/app/user/model"
 	"go-api-mono/internal/app/user/repository"
-	"go-api-mono/internal/pkg/database"
-	"go-api-mono/internal/pkg/logger"
+	"go-api-mono/pkg/database"
+	"go-api-mono/pkg/logger"
 )
 
 var (

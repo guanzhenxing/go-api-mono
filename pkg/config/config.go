@@ -7,8 +7,8 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"go-api-mono/internal/pkg/logger"
-	"go-api-mono/internal/pkg/middleware"
+	"go-api-mono/pkg/logger"
+	"go-api-mono/pkg/middleware"
 )
 
 // Config 代表应用程序的完整配置结构

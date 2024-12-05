@@ -1,187 +1,137 @@
-.PHONY: all build clean test coverage lint run migrate-up migrate-down docker-build docker-run help check secure update-tools check-go-version
+.PHONY: all build run test clean check fmt lint vet test-coverage migrate-up migrate-down docker-build docker-run docs swagger integration-test performance-test setup help
 
-# 变量定义
-APP_NAME := go-api-mono
-GO := go
-GOFLAGS := -v
-BINARY := $(APP_NAME)
-VERSION := $(shell git describe --tags --always --dirty)
-BUILD_TIME := $(shell date -u '+%Y-%m-%d_%H:%M:%S')
-LDFLAGS := -ldflags "-X main.Version=$(VERSION) -X main.BuildTime=$(BUILD_TIME)"
-COVERAGE_DIR := coverage
-GOLANGCI_LINT_VERSION := v1.55.2
+# Go parameters
+GOCMD=go
+GOBUILD=$(GOCMD) build
+GORUN=$(GOCMD) run
+GOCLEAN=$(GOCMD) clean
+GOTEST=$(GOCMD) test
+GOGET=$(GOCMD) get
+GOMOD=$(GOCMD) mod
+BINARY_NAME=go-api-mono
 
-# 默认环境
-ENV ?= development
+# Build flags
+LDFLAGS=-ldflags "-w -s"
 
-# Docker相关变量
-DOCKER_IMAGE := $(APP_NAME)
-DOCKER_TAG ?= latest
+# Environment variables
+export GO_ENV ?= development
+export CONFIG_PATH ?= configs/config.yaml
 
-# 帮助信息
+all: check build
+
 help:
-	@echo "Management commands for $(APP_NAME):"
-	@echo
-	@echo "Usage:"
-	@echo "    make build          Build binary"
-	@echo "    make run            Run application"
-	@echo "    make clean          Clean build files"
-	@echo "    make test           Run tests"
-	@echo "    make coverage       Run tests with coverage"
-	@echo "    make lint           Run linter"
-	@echo "    make check          Run all checks (format, lint, test, vet)"
-	@echo "    make bench          Run benchmarks"
-	@echo "    make vuln           Run vulnerability check"
-	@echo "    make migrate-up     Run database migrations up"
-	@echo "    make migrate-down   Run database migrations down"
-	@echo "    make docker-build   Build docker image"
-	@echo "    make docker-run     Run docker container"
-	@echo "    make swagger        Generate swagger documentation"
-	@echo "    make help           Show this help message"
-	@echo
-	@echo "Environment variables:"
-	@echo "    ENV                 Set environment (development|production|testing)"
-	@echo "    DOCKER_TAG         Set docker tag (default: latest)"
+	@echo "Available commands:"
+	@echo "  make build           - Build the application"
+	@echo "  make run            - Run the application"
+	@echo "  make test           - Run unit tests"
+	@echo "  make check          - Run all checks (fmt, lint, vet, test)"
+	@echo "  make clean          - Clean build files"
+	@echo "  make fmt            - Format code"
+	@echo "  make lint           - Run linter"
+	@echo "  make vet            - Run go vet"
+	@echo "  make test-coverage  - Run tests with coverage"
+	@echo "  make migrate-up     - Run database migrations up"
+	@echo "  make migrate-down   - Run database migrations down"
+	@echo "  make docker-build   - Build Docker image"
+	@echo "  make docker-run     - Run application in Docker"
+	@echo "  make docs           - Generate documentation"
+	@echo "  make swagger        - Generate Swagger documentation"
+	@echo "  make setup          - Initial project setup"
+	@echo "  make integration-test - Run integration tests"
+	@echo "  make performance-test - Run performance tests"
 
-# 构建
 build:
-	CGO_ENABLED=0 $(GO) build $(GOFLAGS) $(LDFLAGS) -o bin/$(BINARY) ./cmd/app
+	$(GOBUILD) $(LDFLAGS) -o $(BINARY_NAME) ./cmd/app
 
-# 运行
 run:
-	GO_ENV=$(ENV) $(GO) run ./cmd/app/main.go
+	GO_ENV=$(GO_ENV) $(GORUN) ./cmd/app/main.go
 
-# 清理
 clean:
-	rm -rf bin/
-	rm -rf $(COVERAGE_DIR)/
-	find . -type f -name '*.out' -delete
-	find . -type f -name '*.test' -delete
-	find . -type f -name '*.prof' -delete
-	find . -type f -name '*.cov' -delete
+	$(GOCLEAN)
+	rm -f $(BINARY_NAME)
+	rm -rf ./dist
+	rm -rf ./coverage
 
-# 测试
 test:
-	GO_ENV=testing $(GO) test -v ./...
+	GO_ENV=testing $(GOTEST) -v ./...
 
-# 测试覆盖率
-coverage:
-	@mkdir -p $(COVERAGE_DIR)
-	GO_ENV=testing $(GO) test -coverprofile=$(COVERAGE_DIR)/coverage.out ./...
-	$(GO) tool cover -html=$(COVERAGE_DIR)/coverage.out -o $(COVERAGE_DIR)/coverage.html
-	@echo "Coverage report generated in $(COVERAGE_DIR)/coverage.html"
-	@$(GO) tool cover -func=$(COVERAGE_DIR)/coverage.out | grep total | awk '{print "Total coverage: " $$3}'
-
-# 代码检查
-check: fmt lint vet test staticcheck secure
-
-# 格式化检查
-fmt:
+check: fmt lint vet test
+	@echo "Running code quality checks..."
 	@echo "Checking code formatting..."
-	@test -z $$($(GO) fmt ./...)
-
-# 代码检查
-lint:
+	@test -z $$(gofmt -l .)
 	@echo "Running linter..."
-	@if ! command -v golangci-lint &> /dev/null; then \
-		echo "Installing golangci-lint..." && \
-		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $$(go env GOPATH)/bin $(GOLANGCI_LINT_VERSION); \
-	fi
 	golangci-lint run ./...
-
-# 静态分析
-vet:
 	@echo "Running go vet..."
-	$(GO) vet ./...
-
-# 静态检查工具
-staticcheck:
-	@echo "Running staticcheck..."
-	@if ! command -v staticcheck &> /dev/null; then \
-		echo "Installing staticcheck..." && \
-		$(GO) install honnef.co/go/tools/cmd/staticcheck@latest; \
-	fi
-	staticcheck ./...
-
-# 基准测试
-bench:
-	@echo "Running benchmarks..."
-	$(GO) test -bench=. -benchmem ./...
-
-# 性能分析
-profile:
-	@mkdir -p $(COVERAGE_DIR)
-	$(GO) test -cpuprofile=$(COVERAGE_DIR)/cpu.prof -memprofile=$(COVERAGE_DIR)/mem.prof -bench=. ./...
-	$(GO) tool pprof -http=:2024 $(COVERAGE_DIR)/cpu.prof
-
-# 漏洞检查
-vuln:
+	$(GOCMD) vet ./...
 	@echo "Running vulnerability check..."
-	@if ! command -v govulncheck &> /dev/null; then \
-		echo "Installing govulncheck..." && \
-		$(GO) install golang.org/x/vuln/cmd/govulncheck@latest; \
-	fi
 	govulncheck ./...
-	@echo "Vulnerability check completed."
-
-# 依赖检查和更新
-deps:
 	@echo "Checking and updating dependencies..."
-	$(GO) mod download
-	$(GO) mod tidy
-	$(GO) mod verify
+	$(GOMOD) download
+	$(GOMOD) tidy
+	$(GOMOD) verify
 	@echo "Checking for dependency updates..."
-	$(GO) list -u -m all
-	@echo "Dependencies check completed."
+	$(GOCMD) list -u -m all
 
-# 安全检查（包含所有安全相关的检查）
-secure: vuln deps lint staticcheck
-	@echo "All security checks completed."
+fmt:
+	gofmt -w .
+	goimports -w .
 
-# 更新所有工具到最新版本
-update-tools:
-	@echo "Updating development tools..."
-	$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-	$(GO) install honnef.co/go/tools/cmd/staticcheck@latest
-	$(GO) install golang.org/x/vuln/cmd/govulncheck@latest
-	$(GO) install github.com/swaggo/swag/cmd/swag@latest
-	@echo "Development tools updated."
+lint:
+	golangci-lint run
 
-# 检查 Go 版本
-check-go-version:
-	@echo "Checking Go version..."
-	@go version
-	@echo "Required Go version: $(shell grep -E '^go [0-9]+\.[0-9]+(\.[0-9]+)?$$' go.mod | cut -d' ' -f2)"
+vet:
+	$(GOCMD) vet ./...
 
-# 数据库迁移
+test-coverage:
+	mkdir -p coverage
+	GO_ENV=testing $(GOTEST) -coverprofile=coverage/coverage.out ./...
+	$(GOCMD) tool cover -html=coverage/coverage.out -o coverage/coverage.html
+
 migrate-up:
-	$(GO) run cmd/migrate/main.go up
+	$(GORUN) cmd/migrate/main.go up
 
 migrate-down:
-	$(GO) run cmd/migrate/main.go down
+	$(GORUN) cmd/migrate/main.go down
 
-# Docker构建
 docker-build:
-	docker build -t $(DOCKER_IMAGE):$(DOCKER_TAG) .
+	docker build -t $(BINARY_NAME) .
 
-# Docker运行
 docker-run:
-	docker run -p 2024:2024 --env-file .env.$(ENV) $(DOCKER_IMAGE):$(DOCKER_TAG)
+	docker-compose up --build
 
-# 生成swagger文档
+docs:
+	@echo "Generating documentation..."
+	mkdir -p docs/api
+	swag init -g cmd/app/main.go -o docs/api
+
 swagger:
-	@if ! command -v swag &> /dev/null; then \
-		echo "Installing swag..." && \
-		$(GO) install github.com/swaggo/swag/cmd/swag@latest; \
-	fi
+	@echo "Generating Swagger documentation..."
 	swag init -g cmd/app/main.go -o api/swagger
 
-# 安装工具
-tools:
-	$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
-	$(GO) install honnef.co/go/tools/cmd/staticcheck@latest
-	$(GO) install golang.org/x/vuln/cmd/govulncheck@latest
-	$(GO) install github.com/swaggo/swag/cmd/swag@latest
+setup: check
+	@echo "Setting up development environment..."
+	$(GOGET) -u github.com/swaggo/swag/cmd/swag
+	$(GOGET) -u github.com/golangci/golangci-lint/cmd/golangci-lint
+	$(GOGET) -u golang.org/x/tools/cmd/goimports
+	@echo "Installing dependencies..."
+	$(GOMOD) download
+	@echo "Creating necessary directories..."
+	mkdir -p logs
+	mkdir -p coverage
+	@echo "Setup complete!"
 
-# 默认目标
-all: check build
+integration-test:
+	GO_ENV=testing $(GOTEST) -v ./test/integration/...
+
+performance-test:
+	GO_ENV=testing $(GORUN) ./test/performance/...
+
+# Development tools installation
+tools:
+	$(GOGET) -u github.com/swaggo/swag/cmd/swag
+	$(GOGET) -u github.com/golangci/golangci-lint/cmd/golangci-lint
+	$(GOGET) -u golang.org/x/tools/cmd/goimports
+	$(GOGET) -u golang.org/x/vuln/cmd/govulncheck
+
+# Default target
+.DEFAULT_GOAL := help

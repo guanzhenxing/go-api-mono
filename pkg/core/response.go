@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"go-api-mono/internal/pkg/errors"
+	"go-api-mono/pkg/errors"
 )
 
 // H 是一个快捷的 map[string]interface{} 类型
